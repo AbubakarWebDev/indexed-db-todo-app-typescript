@@ -1,7 +1,7 @@
 export interface IDBIndex {
   name: string;
-  options?: IDBIndexParameters;
   keyPath: string | Iterable<string>;
+  options?: IDBIndexParameters;
 }
 
 export interface IDBSchema {
@@ -12,8 +12,8 @@ export interface IDBSchema {
 
 export class IDB {
   private database?: IDBDatabase;
-  private request: IDBOpenDBRequest;
-  private isVersionChanged?: boolean;
+  private readonly request: IDBOpenDBRequest;
+  private isVersionChanged = false;
 
   constructor(
     databaseName: string,
@@ -22,27 +22,60 @@ export class IDB {
     onInitialize?: () => void
   ) {
     this.request = indexedDB.open(databaseName, databaseVersion);
+    this.setupEventListeners(schema, onInitialize);
+  }
 
-    this.request.addEventListener("onerror", this.onRequestError);
-
+  private setupEventListeners(
+    schema: IDBSchema,
+    onInitialize?: () => void
+  ): void {
+    this.request.addEventListener("error", this.onRequestError);
     this.request.addEventListener("success", () =>
       this.onRequestSuccess(onInitialize)
     );
-
     this.request.addEventListener("upgradeneeded", () =>
       this.onUpgradeneeded(schema, onInitialize)
     );
   }
 
+  private onRequestError = (event: Event): void => {
+    console.error(`IndexedDB error: ${this.request?.error}`, event);
+  };
+
+  private onRequestSuccess = (onInitialize?: () => void): void => {
+    this.database = this.request.result;
+    if (!this.isVersionChanged) {
+      onInitialize?.();
+    }
+    this.isVersionChanged = false;
+  };
+
+  private onUpgradeneeded = (
+    schema: IDBSchema,
+    onInitialize?: () => void
+  ): void => {
+    this.database = this.request.result;
+    this.createObjectStore(schema)
+      .then(() => {
+        onInitialize?.();
+        this.isVersionChanged = true;
+      })
+      .catch((error) => alert(error));
+  };
+
   createObjectStore({
     objectStoreName,
     objectStoreOptions,
     objectStoreIndexes,
-  }: IDBSchema) {
+  }: IDBSchema): Promise<string> {
     return new Promise((resolve, reject) => {
       try {
         if (this.database?.objectStoreNames.contains(objectStoreName)) {
-          reject("The passed objectStoreName is already exist on the database");
+          reject(
+            new Error(
+              "The passed objectStoreName already exists in the database"
+            )
+          );
           return;
         }
 
@@ -52,170 +85,117 @@ export class IDB {
         );
 
         if (!objectStore) {
-          reject("Something went wrong. Please try again later");
+          reject(new Error("Failed to create object store"));
           return;
         }
 
-        if (objectStoreIndexes) {
-          objectStoreIndexes.forEach(({ name, keyPath, options }) => {
-            objectStore.createIndex(name, keyPath, options);
-          });
-        }
+        objectStoreIndexes?.forEach(({ name, keyPath, options }) => {
+          objectStore.createIndex(name, keyPath, options);
+        });
 
         objectStore.transaction.oncomplete = () => resolve("success");
       } catch (error) {
         reject(
-          (error instanceof DOMException && error?.message) ||
-            "Something went wrong. Please try again later"
+          error instanceof DOMException
+            ? error.message
+            : "An error occurred while creating the object store"
         );
       }
     });
   }
 
-  createRecord = <T>(
+  createRecord<T>(
     objectStoreName: string,
-    playload: T,
+    payload: T,
     key?: IDBValidKey
-  ) => {
-    return new Promise((resolve, reject) => {
-      const transaction = this.database?.transaction(
-        objectStoreName,
-        "readwrite"
-      );
+  ): Promise<string> {
+    return this.performTransaction(
+      objectStoreName,
+      "readwrite",
+      (objectStore) => {
+        objectStore.add(payload, key);
+      },
+      "write"
+    );
+  }
 
-      if (transaction) {
-        const objectStore = transaction.objectStore(objectStoreName);
-
-        objectStore.add(playload, key);
-
-        transaction.onerror = () => {
-          reject(
-            transaction.error?.message ??
-              "Something went wrong while happening the write operation"
-          );
-        };
-
-        transaction.oncomplete = () => {
-          resolve("success");
-        };
-      }
-    });
-  };
-
-  updateRecord = <T>(
+  updateRecord<T>(
     objectStoreName: string,
-    playload: T,
+    payload: T,
     key?: IDBValidKey
-  ) => {
-    return new Promise((resolve, reject) => {
-      const transaction = this.database?.transaction(
-        objectStoreName,
-        "readwrite"
-      );
+  ): Promise<string> {
+    return this.performTransaction(
+      objectStoreName,
+      "readwrite",
+      (objectStore) => {
+        objectStore.put(payload, key);
+      },
+      "update"
+    );
+  }
 
-      if (transaction) {
-        const objectStore = transaction.objectStore(objectStoreName);
-
-        objectStore.put(playload, key);
-
-        transaction.onerror = () => {
-          reject(
-            transaction.error?.message ??
-              "Something went wrong while happening the update operation"
-          );
-        };
-
-        transaction.oncomplete = () => {
-          resolve("success");
-        };
-      }
-    });
-  };
-
-  getRecords = <T>(objectStoreName: string, key?: string): Promise<T[]> => {
+  getRecords<T>(objectStoreName: string, key?: string): Promise<T[]> {
     return new Promise((resolve, reject) => {
       const transaction = this.database?.transaction(objectStoreName);
-
       if (!transaction) {
-        reject("Something went wrong with transaction");
+        reject(new Error("Failed to create transaction"));
         return;
       }
 
       const objectStore = transaction.objectStore(objectStoreName);
+      const request = key ? objectStore.get(key) : objectStore.getAll();
 
-      let getRequest: IDBRequest<any> | IDBRequest<any[]>;
-
-      if (key) {
-        getRequest = objectStore.get(key);
-      } else {
-        getRequest = objectStore.getAll();
-      }
-
-      getRequest.onerror = () => {
-        reject(
-          getRequest.error?.message ||
-            "Something went wrong while happening the read operation"
-        );
-      };
-
-      getRequest.onsuccess = () => {
+      request.onerror = () =>
+        reject(new Error(request.error?.message || "Failed to read records"));
+      request.onsuccess = () =>
         resolve(
-          Array.isArray(getRequest.result)
-            ? getRequest.result
-            : [getRequest.result]
+          Array.isArray(request.result) ? request.result : [request.result]
         );
-      };
     });
-  };
+  }
 
-  deleteRecord = (objectStoreName: string, key: IDBValidKey | IDBKeyRange) => {
-    return new Promise((resolve, reject) => {
-      const transaction = this.database?.transaction(
-        objectStoreName,
-        "readwrite"
-      );
-
-      if (transaction) {
-        const objectStore = transaction.objectStore(objectStoreName);
-
+  deleteRecord(
+    objectStoreName: string,
+    key: IDBValidKey | IDBKeyRange
+  ): Promise<string> {
+    return this.performTransaction(
+      objectStoreName,
+      "readwrite",
+      (objectStore) => {
         objectStore.delete(key);
+      },
+      "delete"
+    );
+  }
 
-        transaction.onerror = () => {
-          reject(
-            transaction.error?.message ??
-              "Something went wrong while happening the delete operation"
-          );
-        };
-
-        transaction.oncomplete = () => {
-          resolve("success");
-        };
+  private performTransaction(
+    objectStoreName: string,
+    mode: IDBTransactionMode,
+    operation: (objectStore: IDBObjectStore) => void,
+    operationType: string
+  ): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const transaction = this.database?.transaction(objectStoreName, mode);
+      if (!transaction) {
+        reject(
+          new Error(
+            `Failed to create transaction for ${operationType} operation`
+          )
+        );
+        return;
       }
+
+      const objectStore = transaction.objectStore(objectStoreName);
+      operation(objectStore);
+
+      transaction.onerror = () =>
+        reject(
+          new Error(
+            transaction.error?.message ||
+              `Failed to perform ${operationType} operation`
+          )
+        );
+      transaction.oncomplete = () => resolve("success");
     });
-  };
-
-  onUpgradeneeded = (schema: IDBSchema, onInitialize?: () => void) => {
-    this.database = this.request.result;
-
-    this.createObjectStore(schema)
-      .then(() => {
-        onInitialize?.();
-        this.isVersionChanged = true;
-      })
-      .catch((error) => alert(error));
-  };
-
-  onRequestSuccess = (onInitialize?: () => void) => {
-    this.database = this.request.result;
-
-    if (!this.isVersionChanged) {
-      onInitialize?.();
-    }
-
-    this.isVersionChanged = false;
-  };
-
-  onRequestError = (err: Event) => {
-    console.log(`IndexedDB error: ${this.request?.error}`, err);
-  };
+  }
 }
