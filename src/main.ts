@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 
 // ====================================================
-//    Indexed DB Implementation Starts From Here
+//     Indexed DB Implementation Starts From Here
 // ====================================================
 
 if (window.indexedDB) console.log("Indexed DB is supported");
@@ -20,7 +20,7 @@ request.onsuccess = () => {
   database = request.result;
 };
 
-request.onupgradeneeded = function (event) {
+request.onupgradeneeded = function () {
   // Perform schema changes or upgrades here
   database = request.result;
 
@@ -45,57 +45,19 @@ const setDataOnIDB = <T>(
   todoStore.add(playload);
 
   return new Promise((resolve, reject) => {
-    transaction.onerror = (event) => {
+    transaction.onerror = () => {
       reject(transaction.error);
     };
 
-    transaction.oncomplete = (event) => {
+    transaction.oncomplete = () => {
       resolve("success");
     };
   });
 };
 
 // ====================================================
-//    Indexed DB Implementation Ends Here
+//        Indexed DB Implementation End Here
 // ====================================================
-
-const modal = document.querySelector<HTMLDivElement>(".main-modal");
-const closeButton =
-  document.querySelectorAll<HTMLButtonElement>(".modal-close");
-
-const modalClose = () => {
-  if (modal) {
-    modal.classList.remove("fadeIn");
-    modal.classList.add("fadeOut");
-    setTimeout(() => {
-      modal.style.display = "none";
-    }, 500);
-  }
-};
-
-const openModal = () => {
-  if (modal) {
-    modal.classList.remove("fadeOut");
-    modal.classList.add("fadeIn");
-    modal.style.display = "flex";
-  }
-};
-
-for (let i = 0; i < closeButton.length; i++) {
-  const elements = closeButton[i];
-
-  if (elements) {
-    elements.onclick = (e) => modalClose();
-  }
-
-  if (modal) {
-    modal.style.display = "none";
-  }
-
-  window.onclick = function (event) {
-    if (event.target == modal) modalClose();
-  };
-}
 
 const todoNameInput = document.getElementById("todo-name") as HTMLInputElement;
 const todoImageInput = document.getElementById(
