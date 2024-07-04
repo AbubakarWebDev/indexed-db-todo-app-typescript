@@ -102,7 +102,37 @@ export class IDB {
     });
   };
 
-  getRecords = <T>(objectStoreName: string): Promise<T[]> => {
+  updateRecord = <T>(
+    objectStoreName: string,
+    playload: T,
+    key?: IDBValidKey
+  ) => {
+    return new Promise((resolve, reject) => {
+      const transaction = this.database?.transaction(
+        objectStoreName,
+        "readwrite"
+      );
+
+      if (transaction) {
+        const objectStore = transaction.objectStore(objectStoreName);
+
+        objectStore.put(playload, key);
+
+        transaction.onerror = () => {
+          reject(
+            transaction.error?.message ??
+              "Something went wrong while happening the update operation"
+          );
+        };
+
+        transaction.oncomplete = () => {
+          resolve("success");
+        };
+      }
+    });
+  };
+
+  getRecords = <T>(objectStoreName: string, key?: string): Promise<T[]> => {
     return new Promise((resolve, reject) => {
       const transaction = this.database?.transaction(objectStoreName);
 
@@ -113,7 +143,13 @@ export class IDB {
 
       const objectStore = transaction.objectStore(objectStoreName);
 
-      const getRequest = objectStore.getAll();
+      let getRequest: IDBRequest<any> | IDBRequest<any[]>;
+
+      if (key) {
+        getRequest = objectStore.get(key);
+      } else {
+        getRequest = objectStore.getAll();
+      }
 
       getRequest.onerror = () => {
         reject(
@@ -123,8 +159,38 @@ export class IDB {
       };
 
       getRequest.onsuccess = () => {
-        resolve(getRequest.result);
+        resolve(
+          Array.isArray(getRequest.result)
+            ? getRequest.result
+            : [getRequest.result]
+        );
       };
+    });
+  };
+
+  deleteRecord = (objectStoreName: string, key: IDBValidKey | IDBKeyRange) => {
+    return new Promise((resolve, reject) => {
+      const transaction = this.database?.transaction(
+        objectStoreName,
+        "readwrite"
+      );
+
+      if (transaction) {
+        const objectStore = transaction.objectStore(objectStoreName);
+
+        objectStore.delete(key);
+
+        transaction.onerror = () => {
+          reject(
+            transaction.error?.message ??
+              "Something went wrong while happening the delete operation"
+          );
+        };
+
+        transaction.oncomplete = () => {
+          resolve("success");
+        };
+      }
     });
   };
 
