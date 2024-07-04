@@ -1,59 +1,21 @@
 import { nanoid } from "nanoid";
 import { IDB, IDBSchema } from "./idb";
 
-// ====================================================
-//     Indexed DB Implementation Starts From Here
-// ====================================================
-
-if (!window.indexedDB) {
-  alert("Indexed DB is not supported");
-}
-
-const DATABASE_NAME = "main";
-const DATABASE_SCHEMA_VER = 1;
-const OBJECT_STORE_NAME = "todos";
-
-const idbSchema: IDBSchema = {
-  objectStoreName: OBJECT_STORE_NAME,
-  objectStoreIndexes: [
-    {
-      name: "nameIndex",
-      keyPath: "name",
-      options: { unique: false },
-    },
-  ],
-  objectStoreOptions: {
-    keyPath: "id",
-  },
-};
-
-const onInitialize = () => {
-  renderTodos();
-};
-
-const idb = new IDB(
-  DATABASE_NAME,
-  DATABASE_SCHEMA_VER,
-  idbSchema,
-  onInitialize
-);
-
-// ====================================================
-//        Indexed DB Implementation End Here
-// ====================================================
-
 interface Todo {
   id: string;
   name: string;
   image: File;
 }
 
-const todoNameInput = document.getElementById("todo-name") as HTMLInputElement;
-const todoImageInput = document.getElementById(
-  "todo-image"
-) as HTMLInputElement;
-
 document.getElementById("submit-btn")?.addEventListener("click", async () => {
+  const todoNameInput = document.getElementById(
+    "todo-name"
+  ) as HTMLInputElement;
+
+  const todoImageInput = document.getElementById(
+    "todo-image"
+  ) as HTMLInputElement;
+
   const todoName = todoNameInput.value;
   const todoImage = todoImageInput.files && todoImageInput.files[0];
 
@@ -132,3 +94,44 @@ async function renderTodos() {
     console.log(error);
   }
 }
+
+// ====================================================
+//     Indexed DB Implementation Starts From Here
+// ====================================================
+
+if (!window.indexedDB) {
+  alert("Indexed DB is not supported");
+}
+
+const DATABASE_NAME = "main";
+const DATABASE_SCHEMA_VER = 1;
+const OBJECT_STORE_NAME = "todos";
+
+const idbSchema: IDBSchema = {
+  objectStoreName: OBJECT_STORE_NAME,
+  objectStoreIndexes: [
+    {
+      name: "nameIndex",
+      keyPath: "name",
+      options: { unique: false },
+    },
+  ],
+  objectStoreOptions: {
+    keyPath: "id",
+  },
+};
+
+const onInitialize = () => {
+  renderTodos();
+};
+
+const idb = new IDB(
+  DATABASE_NAME,
+  DATABASE_SCHEMA_VER,
+  idbSchema,
+  onInitialize
+);
+
+// ====================================================
+//        Indexed DB Implementation End Here
+// ====================================================
