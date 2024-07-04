@@ -1,59 +1,33 @@
 import { nanoid } from "nanoid";
+import { IDB, IDBSchema } from "./idb";
 
 // ====================================================
 //     Indexed DB Implementation Starts From Here
 // ====================================================
 
-if (window.indexedDB) console.log("Indexed DB is supported");
+if (!window.indexedDB) {
+  alert("Indexed DB is not supported");
+}
 
-const DATABASE_VER = 1;
 const DATABASE_NAME = "main";
+const DATABASE_SCHEMA_VER = 2;
 const OBJECT_STORE_NAME = "todos";
 
-let database: IDBDatabase;
-const request = indexedDB.open(DATABASE_NAME, DATABASE_VER);
-
-request.onerror = (err) =>
-  console.error(`IndexedDB error: ${request.error}`, err);
-
-request.onsuccess = () => {
-  database = request.result;
-};
-
-request.onupgradeneeded = function () {
-  // Perform schema changes or upgrades here
-  database = request.result;
-
-  // Create an objectStore for this database
-  const objectStore = database.createObjectStore(OBJECT_STORE_NAME, {
+const idbSchema: IDBSchema = {
+  objectStoreName: OBJECT_STORE_NAME,
+  objectStoreIndexes: [
+    {
+      name: "nameIndex",
+      keyPath: "name",
+      options: { unique: false },
+    },
+  ],
+  objectStoreOptions: {
     keyPath: "id",
-  });
-
-  objectStore.createIndex("name", "name", { unique: false });
+  },
 };
 
-const setDataOnIDB = <T>(
-  objectStoreName: string,
-  playload: T
-): Promise<DOMException | string | null> => {
-  database = request.result;
-
-  const transaction = database.transaction(objectStoreName, "readwrite");
-
-  const todoStore = transaction.objectStore(OBJECT_STORE_NAME);
-
-  todoStore.add(playload);
-
-  return new Promise((resolve, reject) => {
-    transaction.onerror = () => {
-      reject(transaction.error);
-    };
-
-    transaction.oncomplete = () => {
-      resolve("success");
-    };
-  });
-};
+const idb = new IDB(DATABASE_NAME, DATABASE_SCHEMA_VER, idbSchema);
 
 // ====================================================
 //        Indexed DB Implementation End Here
@@ -74,7 +48,7 @@ document.getElementById("submit-btn")?.addEventListener("click", async () => {
   }
 
   try {
-    await setDataOnIDB(OBJECT_STORE_NAME, {
+    await idb.createRecord(OBJECT_STORE_NAME, {
       id: nanoid(),
       name: todoName,
       image: todoImage,
