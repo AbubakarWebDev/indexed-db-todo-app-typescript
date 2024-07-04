@@ -13,29 +13,25 @@ export interface IDBSchema {
 export class IDB {
   private database?: IDBDatabase;
   private request: IDBOpenDBRequest;
+  private isVersionChanged?: boolean;
 
   constructor(
     databaseName: string,
     databaseVersion: number,
-    schema: IDBSchema
+    schema: IDBSchema,
+    onInitialize?: () => void
   ) {
     this.request = indexedDB.open(databaseName, databaseVersion);
 
-    this.request.addEventListener("onerror", (err) => {
-      console.log(`IndexedDB error: ${this.request?.error}`, err);
-    });
+    this.request.addEventListener("onerror", this.onRequestError);
 
-    this.request.addEventListener("success", () => {
-      this.database = this.request.result;
-    });
+    this.request.addEventListener("success", () =>
+      this.onRequestSuccess(onInitialize)
+    );
 
-    this.request.addEventListener("upgradeneeded", async () => {
-      this.database = this.request.result;
-
-      this.createObjectStore(schema)
-        .then((response) => console.log(response))
-        .catch((error) => console.error(error));
-    });
+    this.request.addEventListener("upgradeneeded", () =>
+      this.onUpgradeneeded(schema, onInitialize)
+    );
   }
 
   createObjectStore({
@@ -66,7 +62,7 @@ export class IDB {
           });
         }
 
-        resolve("success");
+        objectStore.transaction.oncomplete = () => resolve("success");
       } catch (error) {
         reject(
           (error instanceof DOMException && error?.message) ||
@@ -106,26 +102,54 @@ export class IDB {
     });
   };
 
-  getRecords = <T>(objectStoreName: string): Promise<T> => {
+  getRecords = <T>(objectStoreName: string): Promise<T[]> => {
     return new Promise((resolve, reject) => {
       const transaction = this.database?.transaction(objectStoreName);
 
-      if (transaction) {
-        const objectStore = transaction.objectStore(objectStoreName);
-
-        const getRequest = objectStore.get("444-44-4444");
-
-        getRequest.onerror = () => {
-          reject(
-            getRequest.error?.message ||
-              "Something went wrong while happening the read operation"
-          );
-        };
-
-        getRequest.onsuccess = () => {
-          resolve(getRequest.result);
-        };
+      if (!transaction) {
+        reject("Something went wrong with transaction");
+        return;
       }
+
+      const objectStore = transaction.objectStore(objectStoreName);
+
+      const getRequest = objectStore.getAll();
+
+      getRequest.onerror = () => {
+        reject(
+          getRequest.error?.message ||
+            "Something went wrong while happening the read operation"
+        );
+      };
+
+      getRequest.onsuccess = () => {
+        resolve(getRequest.result);
+      };
     });
+  };
+
+  onUpgradeneeded = (schema: IDBSchema, onInitialize?: () => void) => {
+    this.database = this.request.result;
+
+    this.createObjectStore(schema)
+      .then(() => {
+        onInitialize?.();
+        this.isVersionChanged = true;
+      })
+      .catch((error) => alert(error));
+  };
+
+  onRequestSuccess = (onInitialize?: () => void) => {
+    this.database = this.request.result;
+
+    if (!this.isVersionChanged) {
+      onInitialize?.();
+    }
+
+    this.isVersionChanged = false;
+  };
+
+  onRequestError = (err: Event) => {
+    console.log(`IndexedDB error: ${this.request?.error}`, err);
   };
 }
