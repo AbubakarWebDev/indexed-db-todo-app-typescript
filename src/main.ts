@@ -124,7 +124,7 @@ addDynamicEventListener(
   }
 );
 
-const renderTodos = async () => {
+async function renderTodos() {
   await tryCatch(async () => {
     const todos = await idb.getRecords<Todo>(OBJECT_STORE_NAME);
     const tableBody = document.getElementById("table-body");
@@ -166,13 +166,13 @@ const renderTodos = async () => {
           </td>
         </tr>
       `;
-
-      if (tableBody) {
-        tableBody.innerHTML = tableRowsHTML;
-      }
     });
+
+    if (tableBody) {
+      tableBody.innerHTML = tableRowsHTML;
+    }
   });
-};
+}
 
 // ====================================================
 //     Indexed DB Implementation Starts From Here
